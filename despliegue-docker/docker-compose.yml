@@ -1,0 +1,85 @@
+version: '3'
+
+volumes:
+  mongodata:
+  cratedata:
+
+services:
+
+
+  mongodb:
+    expose:
+      - "27017"
+    image: mongo:3.2
+    stdin_open: true
+    tty: true
+    volumes:
+      - mongodata:/data/db
+
+      
+  orion:
+    command:  -dbhost mongodb -port 1026 -logLevel DEBUG
+    depends_on:
+      - mongodb
+    expose:
+        - "1026"
+    image: fiware/orion:latest
+    ports:
+      - "1026:1026"
+    stdin_open: true
+    tty: true
+
+    
+  iotagent-lora:
+    depends_on:
+      - mongodb
+      - orion
+    entrypoint: bin/iotagent-lora docker/config-docker.js
+    image: ioeari/iotagent-lora
+    ports:
+      - "4041:4041"
+    stdin_open: true
+    tty: true
+    
+    
+  crate:
+    image: crate:3.0.7
+    ports:
+      # Admin UI
+      - "4200:4200"
+      # Transport protocol
+      - "4300:4300"
+    command: -Ccluster.name=democluster -Chttp.cors.enabled=true -Chttp.cors.allow-origin="*"
+    environment:
+      - MAX_MAP_COUNT=262144
+      - ES_JAVA_OPTS="-Xms1g -Xmx1g"
+      - CRATE_HEAP_SIZE=2g
+    volumes:
+      - cratedata:/data
+
+      
+  quantumleap:
+    image: smartsdk/quantumleap:0.6
+    ports:
+      - "8668:8668"
+    depends_on:
+      - mongodb
+      - orion
+      - crate
+    environment:
+      - CRATE_HOST=crate
+      
+      
+  grafana:
+    image: grafana/grafana:5.4.3
+    environment:
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-worldmap-panel,grafana-piechart-panel,vonage-status-panel,citilogics-geoloop-panel,mtanda-histogram-panel,natel-discrete-panel,https://www.hopu.eu/wp-content/grafana/smart-spot-worldmap-panel-v1-1.zip;smart-spot,https://www.hopu.eu/wp-content/grafana/crate-datasource-master.zip;crate-datasource,https://www.hopu.eu/wp-content/grafana/hop_singlestat.zip;hop_singlestat
+    ports:
+      - "3000:3000"
+    depends_on:
+      - crate
+
+
+networks:
+    default:
+      
